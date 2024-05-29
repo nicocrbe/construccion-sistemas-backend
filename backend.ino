@@ -49,7 +49,7 @@ void setup() {
   pinMode(pinLed, OUTPUT);
   irsend.begin();
 
-  servo.attach(pinServo, 0, 1250);
+  servo.attach(pinServo, 0, 1280);
 
   digitalWrite(pinLiving, HIGH);
   digitalWrite(pinCocina, HIGH);
@@ -73,6 +73,9 @@ void setup() {
   server.on("/login", HTTP_POST, handleLogin);
   server.on("/login", HTTP_OPTIONS, handleCors);
   server.on("/health", HTTP_GET, handleHealth);
+  server.on("/reset", HTTP_POST, handleReset);
+  server.on("/reset", HTTP_OPTIONS, handleCors);
+
 
   server.begin();
   Serial.println("Servidor iniciado");
@@ -297,13 +300,13 @@ void handleLogin() {
 
   if (strcmp(receivedUser, usernameLogin) == 0 && strcmp(receivedPassword, passwordLogin) == 0) {
     server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
     server.send(200, "application/json", "{\"message\":\"success\", \"token\":\"logged\"}");
   } else {
     server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
     server.send(401, "application/json", "{\"message\":\"Invalid credentials\"}");
   }
 }
@@ -313,6 +316,29 @@ void handleHealth() {
   server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "*");
   server.send(200, "application/json", "{\"status\": \"ok\"}");
+}
+
+void handleReset() {
+  // Borrar todas las órdenes
+  ordenesLuces.clear();
+  ordenesGenerales.clear();
+
+  // Apagar todos los dispositivos
+  digitalWrite(pinLiving, HIGH);
+  digitalWrite(pinCocina, HIGH);
+  servo.detach();
+  irsend.sendSAMSUNG(0xE0E040BF); // Enviar comando de apagado de la TV
+
+  // Reiniciar el índice de la orden actual y el tiempo de la última ejecución para las luces
+  lastExecutionTime = 0;
+  currentOrderIndex = 0;
+  isOn = false;
+
+  // Re-attach the servo after reset
+  servo.attach(pinServo, 0, 1280);
+
+  // Enviar respuesta de éxito
+  sendSuccessResponse();
 }
 
 void handleCors() {
