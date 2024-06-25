@@ -1,5 +1,5 @@
-#define RXD2 22
-#define TXD2 25
+#define RXD2 26
+#define TXD2 27
 // FUNCIONAAA REPRODUCE CADA 30 SEGS LAS PISTAS Y EMPIEZA DESDE LA 1 EN BUCLE
 int currentTrack = 1; // Variable para llevar el registro del número de pista actual
 const int totalTracks = 3; // Total de pistas disponibles
