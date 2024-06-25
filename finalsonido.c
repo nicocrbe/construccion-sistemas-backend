@@ -19,8 +19,8 @@ const int pinServo = 25;
 const int pinLed = 22;
 const int pinIrReceiver = 23;
 const int pinIrSender = 21;
-const int pinDFPlayerRx = 16; // RX pin del DFPlayer Mini
-const int pinDFPlayerTx = 17; // TX pin del DFPlayer Mini
+const int pinDFPlayerRx = 27; // TX pin del DFPlayer Mini
+const int pinDFPlayerTx = 26; // RX pin del DFPlayer Mini
 
 Servo servo;
 IRsend irsend(pinIrSender);
@@ -62,6 +62,7 @@ void setup() {
   Serial.begin(115200);
   mySoftwareSerial.begin(9600);
   myDFPlayer.begin(mySoftwareSerial);
+  myDFPlayer.volume(20);
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
