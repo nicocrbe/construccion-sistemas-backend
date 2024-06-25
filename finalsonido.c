@@ -6,8 +6,8 @@
 #include <ESP32Servo.h>
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
-#include <DFRobotDFPlayerMini.h>
-#include <SoftwareSerial.h>
+#include "SoftwareSerial.h"
+#include "DFRobotDFPlayerMini.h"
 #include <vector>
 #include "config.h"  // Incluir el archivo de configuración generado
 
@@ -19,14 +19,17 @@ const int pinServo = 25;
 const int pinLed = 22;
 const int pinIrReceiver = 23;
 const int pinIrSender = 21;
-const int pinDFPlayerRx = 27; // TX pin del DFPlayer Mini
-const int pinDFPlayerTx = 26; // RX pin del DFPlayer Mini
+
+static const uint8_t PIN_MP3_TX = 26; // Connects to module's RX 
+static const uint8_t PIN_MP3_RX = 27; // Connects to module's TX 
+SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);
+
+// Create the Player object
+DFRobotDFPlayerMini player; 
 
 Servo servo;
 IRsend irsend(pinIrSender);
 
-SoftwareSerial mySoftwareSerial(pinDFPlayerRx, pinDFPlayerTx); // RX, TX
-DFRobotDFPlayerMini myDFPlayer;
 
 struct Orden {
   String id;
@@ -59,10 +62,20 @@ void setup() {
   digitalWrite(pinLiving, HIGH);
   digitalWrite(pinCocina, HIGH);
 
-  Serial.begin(115200);
-  mySoftwareSerial.begin(9600);
-  myDFPlayer.begin(mySoftwareSerial);
-  myDFPlayer.volume(20);
+  Serial.begin(9600);
+  // Init serial port for DFPlayer Mini
+  softwareSerial.begin(9600);
+
+  // Start communication with DFPlayer Mini
+  if (player.begin(softwareSerial)) {
+   Serial.println("Sonido OK");
+
+    // Set volume to maximum (0 to 30).
+    player.volume(15);
+    // Play the first MP3 file on the SD card
+  } else {
+    Serial.println("Connecting to DFPlayer Mini failed!");
+  }
 
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -196,25 +209,22 @@ void executeOrden(Orden& orden, bool action) {
     Serial.println(action ? "Reproduciendo sonido: " + orden.soundName : "Parando sonido");
     if (action) {
       int trackNumber = getTrackNumber(orden.soundName);
-      myDFPlayer.play(trackNumber); // Reproduce el archivo de sonido correspondiente
+      player.play(trackNumber); // Reproduce el archivo de sonido correspondiente
     } else {
-      myDFPlayer.stop();
+      player.stop();
     }
   }
 }
 
 int getTrackNumber(String soundName) {
   if (soundName == "Ladridos") {
-    return 1;
-  }
-  if (soundName == "Conversaciones") {
     return 2;
   }
-  if (soundName == "Lavarropas") {
-    return 3;
+  if(soundName = "Conversaciones"){
+    return 1;
   }
   // Añade más casos según los archivos de sonido disponibles
-  return 1; // Valor por defecto
+  return 2; // Valor por defecto
 }
 
 void handleControlarLuces() {
@@ -292,9 +302,136 @@ void handleSoundSettings() {
   orden.repeatInterval = repeatInterval;
   orden.soundName = soundName;
 
+  executeOrden(orden,true);
   ordenesSonidos.push_back(orden);
 
   sendSuccessResponse();
+}
+
+void handleControlarServo() {
+  String json = server.arg("plain");
+  Serial.println("JSON recibido: " + json);
+
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    Serial.print("Error al parsear el JSON: ");
+    Serial.println(error.c_str());
+    sendErrorResponse();
+    return;
+  }
+
+  unsigned long repeatInterval = 0;
+  if (doc.containsKey("repeatInterval")) {
+    repeatInterval = doc["repeatInterval"].as<unsigned long>() * 60000UL;
+  }
+
+  // Limpiar órdenes existentes del servo
+  ordenesGenerales.erase(std::remove_if(ordenesGenerales.begin(), ordenesGenerales.end(), [](const Orden& o) {
+    return o.id == "servo";
+  }), ordenesGenerales.end());
+
+  Orden orden;
+  orden.id = "servo";
+  orden.duration = doc["duration"].as<unsigned long>() * 60000UL;
+  orden.isLight = false;
+  orden.startTime = millis();
+  orden.repeatInterval = repeatInterval;
+
+  executeOrden(orden, true);
+  ordenesGenerales.push_back(orden);
+
+  sendSuccessResponse();
+}
+
+void handleControlarTV() {
+  String json = server.arg("plain");
+  Serial.println("JSON recibido: " + json);
+
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, json);
+
+  if (error) {
+    Serial.print("Error al parsear el JSON: ");
+    Serial.println(error.c_str());
+    sendErrorResponse();
+    return;
+  }
+
+  unsigned long repeatInterval = 0;
+  if (doc.containsKey("repeatInterval")) {
+    repeatInterval = doc["repeatInterval"].as<unsigned long>() * 60000UL;
+  }
+
+  // Limpiar órdenes existentes de la TV
+  ordenesGenerales.erase(std::remove_if(ordenesGenerales.begin(), ordenesGenerales.end(), [](const Orden& o) {
+    return o.id == "tv";
+  }), ordenesGenerales.end());
+
+  Orden orden;
+  orden.id = "tv";
+  orden.duration = doc["powerInterval"].as<unsigned long>() * 60000UL;
+  orden.isLight = false;
+  orden.startTime = millis();
+  orden.repeatInterval = repeatInterval;
+
+  executeOrden(orden, true);
+  ordenesGenerales.push_back(orden);
+
+  sendSuccessResponse();
+}
+
+void handleLogin() {
+  StaticJsonDocument<200> doc;
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+
+  if (error) {
+    Serial.print("Error al parsear el JSON: ");
+    Serial.println(error.c_str());
+    sendErrorResponse();
+    return;
+  }
+
+  const char* receivedUser = doc["username"];
+  const char* receivedPassword = doc["password"];
+
+  if (strcmp(receivedUser, usernameLogin) == 0 && strcmp(receivedPassword, passwordLogin) == 0) {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "*");
+    server.send(200, "application/json", "{\"message\":\"success\", \"token\":\"logged\"}");
+  } else {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "*");
+    server.send(401, "application/json", "{\"message\":\"Invalid credentials\"}");
+  }
+}
+
+void handleHealth() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+  server.send(200, "application/json", "{\"status\": \"ok\"}");
+}
+
+void handleLightsStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+
+  String status = (digitalRead(pinLiving) == LOW || digitalRead(pinCocina) == LOW) ? "ENCENDIDO" : "APAGADO";
+  server.send(200, "application/json", "{\"status\": \"" + status + "\"}");
+}
+
+void handleServoStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+
+  String status = digitalRead(pinServo) == HIGH ? "ENCENDIDO" : "APAGADO";
+  server.send(200, "application/json", "{\"status\": \"" + status + "\"}");
 }
 
 void handleReset() {
@@ -308,7 +445,7 @@ void handleReset() {
   digitalWrite(pinCocina, HIGH);
   servo.detach();
   irsend.sendSAMSUNG(tvPowerOffCommand); // Enviar comando de apagado de la TV
-  myDFPlayer.stop(); // Detener la reproducción de sonido
+  player.stop(); // Detener la reproducción de sonido
 
   // Reiniciar el índice de la orden actual y el tiempo de la última ejecución para las luces
   lastExecutionTime = 0;
