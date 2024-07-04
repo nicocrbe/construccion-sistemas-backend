@@ -39,7 +39,7 @@ struct Orden {
   unsigned long startTime;
   bool isOn;
   unsigned long repeatInterval;
-  String soundName;
+  int soundName;
 };
 
 std::vector<Orden> ordenesLuces;
@@ -71,7 +71,7 @@ void setup() {
    Serial.println("Sonido OK");
 
     // Set volume to maximum (0 to 30).
-    player.volume(15);
+    player.volume(20);
     // Play the first MP3 file on the SD card
   } else {
     Serial.println("Connecting to DFPlayer Mini failed!");
@@ -84,6 +84,7 @@ void setup() {
   }
   Serial.println("Conectado a la red WiFi");
   Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
 
   server.on("/controlar-luces", HTTP_POST, handleControlarLuces);
   server.on("/controlar-luces", HTTP_OPTIONS, handleCors);
@@ -208,23 +209,11 @@ void executeOrden(Orden& orden, bool action) {
   } else if (orden.id == "sound") {
     Serial.println(action ? "Reproduciendo sonido: " + orden.soundName : "Parando sonido");
     if (action) {
-      int trackNumber = getTrackNumber(orden.soundName);
-      player.play(trackNumber); // Reproduce el archivo de sonido correspondiente
+      player.play(orden.soundName); // Reproduce el archivo de sonido correspondiente
     } else {
       player.stop();
     }
   }
-}
-
-int getTrackNumber(String soundName) {
-  if (soundName == "Ladridos") {
-    return 2;
-  }
-  if(soundName = "Conversaciones"){
-    return 1;
-  }
-  // Añade más casos según los archivos de sonido disponibles
-  return 2; // Valor por defecto
 }
 
 void handleControlarLuces() {
@@ -289,7 +278,7 @@ void handleSoundSettings() {
   }
 
   unsigned long repeatInterval = doc["interval"].as<unsigned long>() * 60000UL;
-  String soundName = doc["sound"].as<String>();
+  int soundName = doc["sound"].as<int>();
 
   // Limpiar órdenes existentes de sonidos
   ordenesSonidos.clear();
