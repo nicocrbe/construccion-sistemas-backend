@@ -1,8 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-static const char* ssid = "motog_nico";
-static const char* password = "asd12345";
+static const char* ssid = "Personal-91C";
+static const char* password = "0039756196";
 static const char* usernameLogin = "admin";
 static const char* passwordLogin = "admin";
 static const unsigned int tvPowerOnCommand = 0xE0E040BF;
