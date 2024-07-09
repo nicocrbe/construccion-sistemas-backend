@@ -25,25 +25,39 @@ find_esp32_ip() {
     IP_LINE=$(grep "$ESP32_MAC" /tmp/arp-scan-output.txt)
     if [ -z "$IP_LINE" ]; then
         echo "No se pudo encontrar la IP del ESP32"
-        exit 1
+        return 1
     fi
     ESP32_IP=$(echo $IP_LINE | awk '{print $1}')
     echo "IP encontrada: $ESP32_IP"
     echo $ESP32_IP
+    return 0
 }
 
-# Buscar la IP del ESP32
-ESP32_IP=$(find_esp32_ip | tail -n 1)
+# Función para iniciar Serveo
+start_serveo() {
+    local ESP32_IP=$1
+    echo "Iniciando Serveo con IP $ESP32_IP"
+    ssh -i "$SSH_KEY_PATH" -o ServerAliveInterval=60 -R centinel:80:$ESP32_IP:80 serveo.net
+}
 
-# Verificar si se encontró la IP
-if [ -z "$ESP32_IP" ]; then
-    echo "No se pudo encontrar la IP del ESP32. Asegúrate de que está conectado a la red."
-    exit 1
-else
-    echo "La IP del ESP32 es $ESP32_IP"
-fi
-
-# Iniciar Serveo
-echo "Iniciando Serveo con IP $ESP32_IP"
-ssh -i "$SSH_KEY_PATH" -o ServerAliveInterval=60 -R centinel:80:$ESP32_IP:80 serveo.net
-
+# Bucle infinito para reconexión
+while true; do
+    echo "Buscando la IP del ESP32..."
+    if ESP32_IP=$(find_esp32_ip | tail -n 1); then
+        if [ -n "$ESP32_IP" ]; then
+            echo "La IP del ESP32 es $ESP32_IP"
+            start_serveo $ESP32_IP
+            if [ $? -eq 0 ]; then
+                echo "Conexión a Serveo establecida."
+                break
+            else
+                echo "Falló la conexión a Serveo. Reintentando en 30 segundos..."
+            fi
+        else
+            echo "No se pudo encontrar la IP del ESP32. Reintentando en 30 segundos..."
+        fi
+    else
+        echo "Error al ejecutar arp-scan. Reintentando en 30 segundos..."
+    fi
+    sleep 30
+done
